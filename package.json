@@ -6,6 +6,7 @@
   "types": "index.d.ts",
   "scripts": {
     "unit": "cross-env NODE_ENV=test karma start test/karma.conf.js",
+    "start": "npm run dev",
     "dev": "cross-env NODE_ENV=development webpack-dev-server --open --inline --hot --port 9923",
     "build": "cross-env NODE_ENV=production webpack"
   },

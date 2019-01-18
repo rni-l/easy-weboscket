@@ -6,11 +6,13 @@ class Websocket {
   public eventArray: Array<websocket.eventObj>
   public heartTimeObj: any
   public reconnetTimeObj: any
-  public isStopHeartBeat: boolean // 是否停止心脏检测
   public heartBeatNumber: number // 心脏检测次数
+  public isStopHeartBeat: boolean // 是否停止心脏检测
   public isOpen: boolean // 是否开启状态
   public isReconnection: boolean // 是否正则重连中
+  public isInit: boolean // 是否初始
   public restart?: Function // 重连回调函数
+  public exceedConnect?: Function // 超出连接次数回调
 
   constructor(wsUrl: string, options?: websocket.options) {
     this.wsUrl = wsUrl || ''
@@ -34,18 +36,31 @@ class Websocket {
     this.heartBeatNumber = 0
     this.isStopHeartBeat = false
     this.isOpen = false
+    this.isInit = true
     this.isReconnection = false
   }
 
   async open(): Promise<any> {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       this.webSocketObj = new WebSocket(this.wsUrl)
       this.isOpen = true
       this.handleError()
       this.webSocketObj.onopen = () => {
-        this.restartNumber = 0
-        this.isReconnection = false
-        this.initHandle()
+        if (this.isInit) {
+          this.isInit = false
+          this.initHandle()
+          this.heartBeat()
+        } else {
+          this.restartNumber = 0
+          this.reset()
+          this.initHandle()
+          this.heartBeat()
+          if (this.isReconnection) {
+            this.isReconnection = false
+            this.restart && this.restart()
+          }
+          console.log('restart success')
+        }
         resolve()
       }
     })
@@ -54,18 +69,18 @@ class Websocket {
   /**
    * 相当于 WebSocket 的 send 方法
    */
-  public send(data: string | ArrayBuffer | Blob | ArrayBufferView): any {
+  public send(data: string | ArrayBuffer | Blob | ArrayBufferView): void {
     if (!this.isOpen) {
-      // 关闭状态，
-      return false
+      // 关闭状态
+    } else {
+      this.webSocketObj.send(data)
     }
-    this.webSocketObj.send(data)
   }
 
   /**
    * 相当于 WebSocket 的 close 方法
    */
-  public close() {
+  public close(): void {
     this.isOpen = false
     this.webSocketObj.close()
   }
@@ -73,29 +88,23 @@ class Websocket {
   /**
    * 重新生成一个 WebSocket 对象
    */
-  public async start() {
+  public async start(): Promise<any> {
     this.restartNumber += 1
     await this.open()
-    if (this.isReconnection) {
-      this.isReconnection = false
-      this.restart && this.restart()
-    }
-    console.log('restart success')
-    this.reset()
-    // this.initHandle()
-    this.heartBeat()
   }
 
   /**
    * 重启
    */
-  public reconnection() {
+  public reconnection(): void {
     if (this.reconnetTimeObj) {
       clearTimeout(this.reconnetTimeObj)
     }
     if (this.restartNumber >= this.options.maxRestartNumber) {
       this.isReconnection = false
-      throw new Error('max connect')
+      console.log('max connect')
+      this.exceedConnect && this.exceedConnect()
+      return
     }
     this.reconnetTimeObj = setTimeout(() => {
       this.start()
@@ -108,12 +117,12 @@ class Websocket {
    * @param {Function?} callback 回调方法
    * @param {Function?} middleware 中间件处理方法
    */
-  public on(type: string, callback: Function, middleware?: Function): any {
+  public on(type: string, callback: Function, middleware?: Function): void {
     this.eventArray.push({
       type,
-      callback
+      callback,
+      middleware: middleware || undefined
     })
-    // if (!this.webSocketObj) return false
   }
 
   public _on(type: string, callback: Function, middleware?: Function): any {
@@ -144,7 +153,7 @@ class Websocket {
   /**
    * message 处理的中间件
    */
-  private messageMiddleware(event: MessageEvent) {
+  private messageMiddleware(event: MessageEvent): any {
     let resultData: any = {}
     let _data: any = {}
     let type = ''
@@ -169,7 +178,7 @@ class Websocket {
   /**
    * 心跳检测
    */
-  public heartBeat() {
+  public heartBeat(): any {
     const heartOptions = this.options.heartOptions
     clearTimeout(this.heartTimeObj)
     // 如果连续 n 次心跳没收到回复，重连
@@ -182,7 +191,6 @@ class Websocket {
     this.heartTimeObj = setTimeout(() => {
       this.heartBeatNumber += 1
       this.send(heartOptions.sendContent)
-      console.log('heartbeat')
       this.heartBeat()
     }, heartOptions.intervalTime)
   }
@@ -190,38 +198,34 @@ class Websocket {
   /**
    * 重设方法
    */
-  public initHandle() {
-    console.log(this.eventArray)
+  public initHandle(): void {
     this.eventArray.forEach(v => {
-      this._on(v.type, v.callback)
+      this._on(v.type, v.callback, v.middleware || undefined)
     })
   }
 
   /**
    * 重设属性
    */
-  reset() {
+  reset(): void {
     this.clearTime()
   }
 
   /**
    * 清除时间对象的值
    */
-  clearTime() {
+  clearTime(): void {
     clearTimeout(this.heartTimeObj)
     this.isStopHeartBeat = false
     this.heartBeatNumber = 0
   }
 
-  handleError() {
+  handleError(): void {
     this.webSocketObj.addEventListener('error', (event: MessageEvent) => {
-      console.log('weboscket error:', event)
-      // if (event)
       const readyState = this.webSocketObj.readyState
       if (readyState === 2 || readyState === 3) {
         if (this.isReconnection) {
           // 在重连状态下，不需要 error 进行触发重连
-          console.log('isReconnection')
         } else {
           this.reconnection()
         }
@@ -237,7 +241,6 @@ class Websocket {
           this.reconnection()
         }
       }
-      console.log('weboscket close:', event, this.isOpen)
     })
   }
 }
@@ -257,6 +260,7 @@ export namespace websocket {
   export interface eventObj {
     type: string
     callback: Function
+    middleware?: Function
   }
   export interface options {
     maxRestartNumber: number
@@ -270,6 +274,30 @@ export namespace websocket {
   }
   export interface WebSocket {
     [key: string]: any
+  }
+
+  export interface on {
+    (type: string, callback: Function, middleware?: Function): void
+  }
+
+  export interface send {
+    (data: string | ArrayBuffer | Blob | ArrayBufferView): void
+  }
+
+  export interface open {
+    (): Promise<any>
+  }
+
+  export interface start {
+    (): Promise<any>
+  }
+
+  export interface close {
+    (): void
+  }
+
+  export interface reconnection {
+    (): void
   }
 }
 
