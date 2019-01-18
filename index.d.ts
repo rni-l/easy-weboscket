@@ -1,6 +1,6 @@
-import { websocket } from './src/easy-websocket'
+import { websocket } from './src/easy-ws'
 
-export default class EasyWebsocket {
+export default class EasyWs {
   open: websocket.open
   send: websocket.send
   close: websocket.close
@@ -16,7 +16,7 @@ export default class EasyWebsocket {
   handleError(): void
 }
 
-export interface EasyWebsocketInstant extends EasyWebsocket {
+export interface EasyWsInstant extends EasyWs{
   options: websocket.options
   // open: websocket.open
   // send: websocket.send

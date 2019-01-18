@@ -1,4 +1,4 @@
-import Websocket from './easy-websocket'
+import Websocket from './easy-ws'
 
 const obj = new Websocket('ws://localhost:3000', {
   maxRestartNumber: 3, // 最大可试重连接数

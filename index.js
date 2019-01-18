@@ -1,1 +1,1 @@
-module.exports = require('./dist/easy-websocket.js')
+module.exports = require('./dist/easy-ws.js')
